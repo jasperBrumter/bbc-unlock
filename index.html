@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BBC Scroll Unlock — Chrome Extension</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --card: #f6f6f7;
+    --border: #e2e2e4;
+    --accent: #bb1919; /* BBC-ish red, just for flavor */
+    --accent-hover: #9c1414;
+    --code-bg: #1e1e1e;
+    --code-fg: #e6e6e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121212;
+      --fg: #ececec;
+      --muted: #9a9a9a;
+      --card: #1c1c1e;
+      --border: #2e2e30;
+      --accent: #ff5252;
+      --accent-hover: #ff7a7a;
+      --code-bg: #0b0b0c;
+      --code-fg: #dcdcdc;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121212;
+    --fg: #ececec;
+    --muted: #9a9a9a;
+    --card: #1c1c1e;
+    --border: #2e2e30;
+    --accent: #ff5252;
+    --accent-hover: #ff7a7a;
+    --code-bg: #0b0b0c;
+    --code-fg: #dcdcdc;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+
+  h1 {
+    font-size: 1.65rem;
+    margin: 0 0 6px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    margin: 0 0 32px;
+    font-size: 0.98rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+
+  .download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 14px 22px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .download-btn:hover { background: var(--accent-hover); }
+  .download-btn:disabled { opacity: 0.6; cursor: default; }
+
+  .status {
+    margin-top: 12px;
+    font-size: 0.9rem;
+    color: var(--muted);
+    min-height: 1.3em;
+  }
+  .status.ok { color: #2e8b57; }
+  .status.err { color: var(--accent); }
+
+  ol {
+    padding-left: 22px;
+  }
+  li { margin-bottom: 14px; }
+  li:last-child { margin-bottom: 0; }
+
+  code, .path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    word-break: break-word;
+  }
+
+  .note {
+    background: var(--card);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-size: 0.92rem;
+    color: var(--muted);
+    margin-top: 24px;
+  }
+
+  h2 {
+    font-size: 1.15rem;
+    margin: 0 0 16px;
+  }
+
+  .step-title {
+    font-weight: 600;
+    color: var(--fg);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BBC Scroll Unlock</h1>
+  <p class="subtitle">A tiny Chrome extension that strips the Piano paywall/offer overlay on bbc.com and restores page scrolling if it gets stuck.</p>
+
+  <div class="card">
+    <h2>1. Download the extension files</h2>
+    <button class="download-btn" id="downloadBtn">
+      ⬇ Download bbc-scroll-unlock.zip
+    </button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. Install it in Chrome</h2>
+    <ol>
+      <li><span class="step-title">Unzip the file.</span> You should end up with a folder containing two files: <span class="path">manifest.json</span> and <span class="path">unlock.js</span>. Keep them together in one folder — don't move them apart.</li>
+      <li><span class="step-title">Open the extensions page.</span> In Chrome, go to <code>chrome://extensions</code> (paste that into the address bar). Edge users can use <code>edge://extensions</code> the same way.</li>
+      <li><span class="step-title">Turn on Developer mode.</span> There's a toggle for it in the top-right corner of the extensions page.</li>
+      <li><span class="step-title">Click "Load unpacked".</span> A file picker will open — select the folder from step 1 (the one containing <span class="path">manifest.json</span>).</li>
+      <li><span class="step-title">Done.</span> The extension is now active. Visit a BBC News article — if the Piano subscription overlay appears and blocks scrolling, this extension removes it and restores scroll automatically, no click needed.</li>
+    </ol>
+  </div>
+
+  <div class="note">
+    Note: this disables BBC's own subscription/offer prompt (built on a widget called Piano) rather than fixing a bug — worth knowing since it's a deliberate bypass of that prompt, not a glitch fix.
+  </div>
+</div>
+
+<script>
+const files = {
+  "manifest.json": `{
+  "manifest_version": 3,
+  "name": "BBC Scroll Unlock",
+  "version": "1.0",
+  "description": "Removes Piano paywall overlay and restores scrolling on BBC News",
+  "content_scripts": [
+    {
+      "matches": ["https://www.bbc.com/*"],
+      "js": ["unlock.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}
+`,
+  "unlock.js": `(function() {
+  'use strict';
+
+  const blockPreventDefault = (type) => {
+    document.addEventListener(type, function(e) {
+      e.stopImmediatePropagation();
+    }, { capture: true, passive: true });
+  };
+  ['wheel', 'touchmove'].forEach(blockPreventDefault);
+
+  const forceScroll = () => {
+    const html = document.documentElement;
+    const body = document.body;
+    if (!body) return;
+
+    [html, body].forEach(el => {
+      el.style.setProperty('overflow', 'auto', 'important');
+      el.style.setProperty('position', 'static', 'important');
+      el.style.setProperty('height', 'auto', 'important');
+    });
+
+    ['tp-modal-open', 'tp-active', 'no-scroll', 'modal-open', 'overlay-active'].forEach(c => {
+      html.classList.remove(c);
+      body.classList.remove(c);
+    });
+
+    document.querySelectorAll('.tp-modal, .tp-modal-backdrop, .tp-backdrop').forEach(el => el.remove());
+  };
+
+  const observer = new MutationObserver(forceScroll);
+  const startObserving = () => {
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+      childList: true,
+      subtree: true
+    });
+    forceScroll();
+  };
+
+  if (document.body) {
+    startObserving();
+  } else {
+    document.addEventListener('DOMContentLoaded', startObserving);
+  }
+
+  setInterval(forceScroll, 500);
+})();
+`
+};
+
+async function buildZipBlob() {
+  const zip = new JSZip();
+  Object.entries(files).forEach(([name, content]) => zip.file(name, content));
+  return await zip.generateAsync({ type: "blob", mimeType: "application/zip" });
+}
+
+const btn = document.getElementById('downloadBtn');
+const statusEl = document.getElementById('status');
+
+btn.addEventListener('click', async () => {
+  btn.disabled = true;
+  statusEl.className = 'status';
+  statusEl.textContent = 'Preparing download…';
+
+  try {
+    const blob = await buildZipBlob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bbc-scroll-unlock.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    statusEl.className = 'status ok';
+    statusEl.textContent = 'Downloaded — check your downloads folder.';
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Something went wrong building the zip file.';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
