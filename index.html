@@ -177,7 +177,7 @@ const files = {
   "description": "Removes Piano paywall overlay and restores scrolling on BBC News",
   "content_scripts": [
     {
-      "matches": ["https://www.bbc.com/*"],
+      "matches": ["https://www.bbc.com/news/articles/*"],
       "js": ["unlock.js"],
       "run_at": "document_start",
       "all_frames": false
@@ -188,50 +188,63 @@ const files = {
   "unlock.js": `(function() {
   'use strict';
 
-  const blockPreventDefault = (type) => {
-    document.addEventListener(type, function(e) {
-      e.stopImmediatePropagation();
-    }, { capture: true, passive: true });
-  };
-  ['wheel', 'touchmove'].forEach(blockPreventDefault);
+  const LOCK_CLASSES = ['tp-modal-open', 'tp-active', 'no-scroll', 'modal-open', 'overlay-active'];
 
-  const forceScroll = () => {
+  // Only true once we've actually found the Piano overlay (or its lock classes)
+  // on THIS page load — everything else stays completely untouched until then.
+  const overlayPresent = () => {
+    if (document.querySelector('.tp-modal, .tp-modal-backdrop, .tp-backdrop')) return true;
+    const html = document.documentElement;
+    const body = document.body;
+    if (!body) return false;
+    return LOCK_CLASSES.some(c => html.classList.contains(c) || body.classList.contains(c));
+  };
+
+  const removeOverlayAndUnlock = () => {
     const html = document.documentElement;
     const body = document.body;
     if (!body) return;
 
-    [html, body].forEach(el => {
-      el.style.setProperty('overflow', 'auto', 'important');
-      el.style.setProperty('position', 'static', 'important');
-      el.style.setProperty('height', 'auto', 'important');
-    });
+    document.querySelectorAll('.tp-modal, .tp-modal-backdrop, .tp-backdrop').forEach(el => el.remove());
 
-    ['tp-modal-open', 'tp-active', 'no-scroll', 'modal-open', 'overlay-active'].forEach(c => {
+    LOCK_CLASSES.forEach(c => {
       html.classList.remove(c);
       body.classList.remove(c);
     });
 
-    document.querySelectorAll('.tp-modal, .tp-modal-backdrop, .tp-backdrop').forEach(el => el.remove());
+    // Only reset the specific scroll-lock trick (position:fixed + saved top offset),
+    // rather than forcing overflow/position on every page indiscriminately.
+    const savedTop = body.style.top;
+    if (body.style.position === 'fixed' && savedTop) {
+      const scrollY = -parseInt(savedTop, 10) || 0;
+      body.style.position = '';
+      body.style.top = '';
+      window.scrollTo(0, scrollY);
+    }
+    if (getComputedStyle(html).overflow === 'hidden') html.style.removeProperty('overflow');
+    if (getComputedStyle(body).overflow === 'hidden') body.style.removeProperty('overflow');
   };
 
-  const observer = new MutationObserver(forceScroll);
-  const startObserving = () => {
+  const checkAndAct = () => {
+    if (overlayPresent()) removeOverlayAndUnlock();
+  };
+
+  const observer = new MutationObserver(checkAndAct);
+  const start = () => {
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['style', 'class'],
       childList: true,
       subtree: true
     });
-    forceScroll();
+    checkAndAct();
   };
 
   if (document.body) {
-    startObserving();
+    start();
   } else {
-    document.addEventListener('DOMContentLoaded', startObserving);
+    document.addEventListener('DOMContentLoaded', start);
   }
-
-  setInterval(forceScroll, 500);
 })();
 `
 };
